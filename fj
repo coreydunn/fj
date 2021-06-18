@@ -1,0 +1,73 @@
+#!/usr/bin/sh
+
+# Bash implementation to create jar files
+
+die()
+{
+	echo $*
+	[ -e "$tmpdir" ] && rm "$tmpdir" -rf
+	exit 1
+}
+
+printhelp()
+{
+	echo "usage: fj [--help|-h] [cmf MANIFEST JARFILE CLASSFILE]"
+	exit 0
+}
+
+parseargs()
+{
+	for x in "$*"; do
+		if [ "$x" = '--help' ] || [ "$x" = '-h' ]; then
+			printhelp
+		fi
+	done
+}
+
+main()
+{
+	commands="$1"
+	mffile="$2"
+	jarname="$3"
+	classfile="$4"
+
+	parseargs $*
+
+	# Sanity checks
+	[ "$commands" = '' ] && printhelp
+	[ "$mffile" = '' ] && die "error: manifest file not specified"
+	#[ "$jarname" = '' ] && die "error: jar file not specified"
+	[ "$classfile" = '' ] && die "error: class file not specified"
+
+	# More sanity checks
+	[ ! -e "$classfile" ] && die "error: cannot find class file '$classfile'"
+	[ ! -e "$mffile" ] && die "error: cannot find manifest file '$mffile'"
+
+	# Create temporary directory to construct jar file
+	tmpdir="$(mktemp -d)"
+	[ "$tmpdir" = '' ] && die 'error: cannot create temporary directory'
+
+	# Create META-INF directory
+	mkdir "$tmpdir/META-INF"
+	cp "$mffile" "$tmpdir/META-INF/MANIFEST.MF" || die "error: could not copy manifest file"
+
+	# Copy class files
+	for x in $*; do
+		if [[ "$x" =~ ^.*\.class$ ]]; then
+			cp "$x" "$tmpdir/" || die "error: could not copy class file $x"
+		fi
+	done
+
+	# Change directory into temporary directory, compress jar file
+	local wd="$(pwd)"
+	cd "$tmpdir"
+	zip "$jarname" *.class "META-INF/MANIFEST.MF" 2>&1 >/dev/null || die "error: could not compress jar file"
+	cd "$wd" 2>&1 >/dev/null
+
+	# Copy jar file to parent working directory, cleanup
+	#tree $tmpdir
+	cp "$tmpdir/$jarname" ./ || die "error: could not copy temporary jar file to working directory"
+	rm "$tmpdir" -rf
+}
+
+main $*
